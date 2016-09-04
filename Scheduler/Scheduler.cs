@@ -3,9 +3,8 @@ using System.Collections.Generic;
 
 namespace Scheduler
 {
-    class Program
+    class Scheduler
     {
-        private static string[] days = { "Monday", "Tuesday", "Wednesday", "Thursday", "Friday" };
         static void Main(string[] args)
         {
             List<Person> mentors = GeneratePeople(25, Role.Mentor, 60);
@@ -67,8 +66,49 @@ namespace Scheduler
 
             // verify the results
             Console.WriteLine("Verification " + (Verify(assignedPeriods, menteesAssigned) ? "successful" : "failed"));
-            Console.ReadLine();
 
+            // assign the remainder of the mentees to those periods with the highest ratio of mentees to mentors
+            List<Person>[,] mentorsAssigned = new List<Person>[5, 10];
+            for(int d = 0; d < 5; d++)
+            {
+                for (int p = 0; p < 10; p++)
+                {
+                    mentorsAssigned[d, p] = new List<Person>();
+                    mentorsAssigned[d, p].Add(assignedPeriods[d, p]);
+                }
+            }
+
+            List<Person> assigned = new List<Person>();
+            foreach(Person mentor in unassignedMentors)
+            {
+                double maxRatio = 0.0;
+                Tuple<int, int> maxRatioPeriod = null;
+                foreach(var t in mentor.Available)
+                {
+                    double currRatio = menteesAssigned[t.Item1, t.Item2].Count / (double)mentorsAssigned[t.Item1, t.Item2].Count;
+                    if (currRatio > maxRatio)
+                    {
+                        maxRatio = currRatio;
+                        maxRatioPeriod = t;
+                    }
+                }
+                if (maxRatioPeriod != null) {
+                    mentorsAssigned[maxRatioPeriod.Item1, maxRatioPeriod.Item2].Add(mentor);
+                    assigned.Add(mentor);
+                }
+            }
+
+            foreach(Person mentor in assigned)
+            {
+                unassignedMentors.Remove(mentor);
+            }
+
+            if (unassignedMentors.Count != 0)
+            {
+                Console.WriteLine($"{unassignedMentors.Count} mentors cannot be assigned");
+            }
+
+            Console.ReadLine();
         }
 
         static void ResolveDependencies(List<Person> unassignedMentors, List<Person> unassignedMentees, Person[,] assignedPeriods)

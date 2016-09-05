@@ -5,79 +5,137 @@ namespace Scheduler
 {
     class Scheduler
     {
-        static void Main(string[] args)
-        {
-            List<Person> mentors = GeneratePeople(25, Role.Mentor, 60);
-            List<Person> mentees = GeneratePeople(100, Role.Mentee, 70);
+        // mentors and mentees which have not been assigned to a period
+        private List<Person> unassignedMentors;
+        private List<Person> unassignedMentees;
+        // mentors indexed by [day,period]
+        private Person[,] assignedPeriods;
+        // mentors and mentees that have been assigned to groups indexed by [day,period]
+        private List<Person>[,] menteesAssigned;
+        private List<Person>[,] mentorsAssigned;
 
-            List<Person> unassignedMentors = new List<Person>(mentors);
-            List<Person> unassignedMentees = new List<Person>(mentees);
-            
-            // mentors assigned to periods
-            Person[,] assignedPeriods = new Person[5,10];
-            // mentees assigned to periods
-            List<Person>[,] menteesAssigned = new List<Person>[5,10];
+        private static int MAX_FAILED_LOOPS = 15;
+
+        public Scheduler(List<Person> mentors, List<Person> mentees)
+        {
+            unassignedMentees = new List<Person>(mentors);
+            unassignedMentors = new List<Person>(mentees);
+            assignedPeriods = new Person[5, 10]; // 5 days with 10 periods each
+            menteesAssigned = new List<Person>[5, 10];
+            mentorsAssigned = new List<Person>[5, 10];
+            // initialize a list for every period
             for (int i = 0; i < 5; i++)
             {
-                for(int j = 0; j < 10; j++)
+                for (int j = 0; j < 10; j++)
                 {
                     menteesAssigned[i, j] = new List<Person>();
+                    mentorsAssigned[i, j] = new List<Person>();
+                }
+            }
+        }
+
+        // launches a simulated scheduler for testing purposes
+        static void Main(string[] args)
+        {
+            int mentorCount = -1;
+            int menteeCount = -1;
+            if (args.Length == 2)
+            {
+                if (Int32.TryParse(args[0], out mentorCount) && Int32.TryParse(args[1], out menteeCount))
+                {
+                    if( mentorCount > menteeCount)
+                    {
+                        int a = mentorCount;
+                        mentorCount = menteeCount;
+                        menteeCount = a;
+                    }
                 }
             }
 
+            if (mentorCount < 0 || menteeCount < 0)
+            {
+                mentorCount = 25;
+                menteeCount = 100;
+            }
+
+            Console.WriteLine($"Simulating with {mentorCount} mentors and {menteeCount} mentees");
+
+            List<Person> mentors = GeneratePeople(mentorCount, Role.Mentor, 60);
+            List<Person> mentees = GeneratePeople(mentorCount, Role.Mentee, 70);
+
+            Scheduler s = new Scheduler(mentors, mentees);
+            // schedule and then verify the result
+            bool success = s.Schedule();
+            bool valid = s.Verify();
+            if(success)
+            {
+                Console.WriteLine("Successfully assigned all mentees to groups");
+            } else
+            {
+                Console.WriteLine("Failed to assign all mentees to groups");
+            }
+
+            if (valid)
+            {
+                Console.WriteLine("The solution is valid");
+            } else
+            {
+                Console.WriteLine("Invalid solution");
+            }
+
+            if (s.unassignedMentors.Count != 0)
+            {
+                Console.WriteLine("{0} mentor{1} cannot be assigned", s.unassignedMentors.Count, s.unassignedMentors.Count > 1 ? "s" : "");
+            }
+            Console.ReadLine();
+        }
+
+        /*
+         * Begins the scheduler, returning whether every mentee was successfully assigned
+         */
+        public bool Schedule() {
+            bool result = false; // whether the scheduling/assigning of mentors and mentees was successful         
             int failedLoopCount = 0;
             int uCountPrev = 0;
-            while (unassignedMentees.Count > 0 && failedLoopCount < 15)
+            while (unassignedMentees.Count > 0 && failedLoopCount < MAX_FAILED_LOOPS)
             {                
                 // if any mentee can only be assigned to one mentor, assign them
-                ResolveDependencies(unassignedMentors, unassignedMentees, assignedPeriods);
+                ResolveDependencies();
                 //Console.WriteLine($"unassigned: {unassignedMentees.Count}");
                 
                 // if any mentor has now been assigned to a period, assign mentees to those periods where possible
-                AssignMentees(unassignedMentees, assignedPeriods, menteesAssigned);
-                //Console.WriteLine($"unassigned: {unassignedMentees.Count}");
+                AssignMentees();
                 
                 // assign a mentor to a period 
-                if (!DependencyAwareAssignMentor(unassignedMentors, unassignedMentees, assignedPeriods))
+                if (!DependencyAwareAssignMentor())
                 {
                     failedLoopCount++;
                 }
                 if (uCountPrev != unassignedMentees.Count)
                 {
-                    Console.WriteLine($"unassigned: {unassignedMentees.Count}");
                     uCountPrev = unassignedMentees.Count;
+                    failedLoopCount = 0; // reset the number of failed loops once an assignment has been resolved
                 }
             }
             if (unassignedMentees.Count == 0)
             {
-                Console.WriteLine("Success");
+                result = true;
             } else
             {
-                Console.WriteLine("Failure");
-                /*foreach(Person uMentee in unassignedMentees)
-                {
-                    Console.Write($"{uMentee} unassigned\nAvailable:");
-                    foreach(var t in uMentee.Available)
-                    {
-                        Console.Write($"{t}  ");
-                    }
-                }*/
+                result = false;
             }
 
-            // verify the results
-            Console.WriteLine("Verification " + (Verify(assignedPeriods, menteesAssigned) ? "successful" : "failed"));
-
-            // assign the remainder of the mentees to those periods with the highest ratio of mentees to mentors
-            List<Person>[,] mentorsAssigned = new List<Person>[5, 10];
+            // assign the remainder of the mentors to those periods with the highest ratio of mentees to mentors
             for(int d = 0; d < 5; d++)
             {
                 for (int p = 0; p < 10; p++)
                 {
-                    mentorsAssigned[d, p] = new List<Person>();
                     mentorsAssigned[d, p].Add(assignedPeriods[d, p]);
                 }
             }
 
+            // in foreach loops, the looped list cannot be modified so store assigned mentors
+            // for removal afterwards
             List<Person> assigned = new List<Person>();
             foreach(Person mentor in unassignedMentors)
             {
@@ -103,15 +161,14 @@ namespace Scheduler
                 unassignedMentors.Remove(mentor);
             }
 
-            if (unassignedMentors.Count != 0)
-            {
-                Console.WriteLine($"{unassignedMentors.Count} mentors cannot be assigned");
-            }
-
-            Console.ReadLine();
+            return result;
         }
 
-        static void ResolveDependencies(List<Person> unassignedMentors, List<Person> unassignedMentees, Person[,] assignedPeriods)
+        /*
+         * If any depdendencies exist (i.e. a mentee can only be assigned to one mentor-available period, this
+         * will resolve it by assigning those
+         */
+        private void ResolveDependencies()
         {
             // the following loop will discover and resolve dependent mentees, updating the 
             // the unassignable periods list, until this is resolved
@@ -120,7 +177,7 @@ namespace Scheduler
             {
                 bool[,] unassignablePeriods = UnassignablePeriods(unassignedMentors, assignedPeriods);
 
-                //Showing unassignable periods
+                //Showing unassignable periods for debugging
                 /*Console.WriteLine("Unassignable periods:");
                 for (int i = 0; i < 5; i++)
                 {
@@ -156,7 +213,7 @@ namespace Scheduler
          * For periods that have a mentor assigned, assign mentees that are available in that period
          * For mentees available in two periods, a mentee will be assigned to the period with the fewest mentees assigned
          */
-        static void AssignMentees(List<Person> unassignedMentees, Person[,] assignedPeriods, List<Person>[,] menteesAssigned)
+        private void AssignMentees()
         {
             List<Person> assigned = new List<Person>();
             foreach(Person mentee in unassignedMentees)
@@ -186,7 +243,11 @@ namespace Scheduler
             }
         }
 
-        static bool DependencyAwareAssignMentor(List<Person> unassignedMentors, List<Person> unassignedMentees, Person[,] assignedPeriods)
+        /*
+         * Where no dependencies exist, this will assign a mentor to a period such that the fewest dependencies are created
+         * A dependency is a mentee that can be assigned to only one period with a mentor available
+         */
+        private bool DependencyAwareAssignMentor()
         {
             // this will assign the mentor that creates the fewest dependencies 
             List<Person> unassignedMentorCopy = null;
@@ -238,9 +299,9 @@ namespace Scheduler
         }
 
         /*
-         * Assigns a mentor to the period with the most available mentees
+         * Assigns a mentor to the period with the most available mentees; replaced by DependencyAwareAssignMentor()
          */
-        static bool AssignMentor(List<Person> unassignedMentors, List<Person> unassignedMentees, Person[,] assignedPeriods)
+        private bool AssignMentor()
         {
             Tuple<int, int> tMax = null;
             Person mentorMax = null;
@@ -282,7 +343,7 @@ namespace Scheduler
          * Periods to which it is never possible to assign a mentor (i.e., no mentor is available)
          * UnassignablePeriods[d,p] == true => the period (d,p) has no available mentor
          */
-        static bool[,] UnassignablePeriods(List<Person> unassignedMentors, Person[,] assignedMentors)
+        bool[,] UnassignablePeriods(List<Person> unassignedMentors, Person[,] assignedPeriods)
         {
             bool[,] unassignable = new bool[5,10];
             for (int i = 0; i < 5; i++)
@@ -297,7 +358,7 @@ namespace Scheduler
                 {
                     for (int p = 0; p < 10; p++)
                     {
-                        if (unassignable[d,p] && assignedMentors[d,p] != null || mentor.GetAvailable(d,p))
+                        if (unassignable[d,p] && assignedPeriods[d,p] != null || mentor.GetAvailable(d,p))
                         {
                             unassignable[d, p] = false;
                         }
@@ -312,7 +373,7 @@ namespace Scheduler
          * Returns the triple (mentor, day, period) of a mentee if the mentee only has one possible assignable period;
          * otherwise returns (null, -1, -1)
          */
-        static Tuple<Person, int, int> GetDependency(Person mentee, List<Person> unassignedMentors, bool[,] unassignablePeriods)
+        private Tuple<Person, int, int> GetDependency(Person mentee, List<Person> unassignedMentors, bool[,] unassignablePeriods)
         {
             int count = 0, dayC = -1, perC = -1;
             Person mentorC = null;
@@ -361,7 +422,11 @@ namespace Scheduler
             return generated;
         }
 
-        static bool Verify(Person[,] assignedPeriods, List<Person>[,] menteesAssigned)
+        /*
+         * Should only be run after Schedule(); determines whether the assignment is a valid one
+         * (i.e. no mentor/mentee assigned to period [d,p] where the mentor is not available in [d,p])
+         */
+        public bool Verify()
         {
             // verification
             List<Person> mentorVerify = new List<Person>();
@@ -410,6 +475,22 @@ namespace Scheduler
             }
 
             return valid;
+        }
+
+        public List<Person>[,] MentorsByPeriod
+        {
+            get
+            {
+                return this.mentorsAssigned;
+            }
+        }
+
+        public List<Person>[,] MenteesByPeriod
+        {
+            get
+            {
+                return this.menteesAssigned;
+            }
         }
     }
 

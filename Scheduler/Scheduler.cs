@@ -400,7 +400,8 @@ namespace Scheduler
         }
 
         /*
-         * generate a list of Person objects with randomized schedules for simulation
+         * generate a list of `count` Person objects with randomized schedules for simulation
+         * Each Person has a `probabilityOfBusiness`% (Uniform) chance of being busy in each period
          */
         static List<Person> GeneratePeople(int count, Role role, int probabilityOfBusiness)
         {
@@ -414,7 +415,7 @@ namespace Scheduler
                 {
                     for (int per = 0; per < 10; per++)
                     {
-                        curr.SetAvailable(day, per, r.Next(1, 101) > probabilityOfBusiness); // p% probability of being busy
+                        curr.SetAvailable(day, per, r.Next(1, 101) > probabilityOfBusiness); // % probability of being busy
                     }
                 }
                 generated.Add(curr);
@@ -424,7 +425,7 @@ namespace Scheduler
 
         /*
          * Should only be run after Schedule(); determines whether the assignment is a valid one
-         * (i.e. no mentor/mentee assigned to period [d,p] where the mentor is not available in [d,p])
+         * (i.e. no Person assigned to period [d,p] where the Person is not available in [d,p])
          */
         public bool Verify()
         {
@@ -434,7 +435,7 @@ namespace Scheduler
             bool valid = true;
             for (int i = 0; i < 5; i++)
             {
-                for (int j = 0; j < 5; j++)
+                for (int j = 0; j < 10; j++)
                 {
                     if (assignedPeriods[i, j] != null)
                     {

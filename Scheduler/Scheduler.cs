@@ -18,8 +18,8 @@ namespace Scheduler
 
         public Scheduler(List<Person> mentors, List<Person> mentees)
         {
-            unassignedMentees = new List<Person>(mentors);
-            unassignedMentors = new List<Person>(mentees);
+            unassignedMentees = new List<Person>(mentees);
+            unassignedMentors = new List<Person>(mentors);
             assignedPeriods = new Person[5, 10]; // 5 days with 10 periods each
             menteesAssigned = new List<Person>[5, 10];
             mentorsAssigned = new List<Person>[5, 10];
@@ -165,7 +165,7 @@ namespace Scheduler
         }
 
         /*
-         * If any depdendencies exist (i.e. a mentee can only be assigned to one mentor-available period, this
+         * If any dependencies exist (i.e. a mentee can only be assigned to one mentor-available period, this
          * will resolve it by assigning those
          */
         private void ResolveDependencies()
